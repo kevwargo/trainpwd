@@ -4,9 +4,10 @@ import logging
 import os
 import random
 import sys
-import time
 from getpass import getpass
+from signal import SIGHUP, signal
 from subprocess import CalledProcessError, check_output, run
+from threading import Event
 
 KDIALOG_ARGS = ["kdialog", "--title", "Train Password"]
 
@@ -30,9 +31,23 @@ def run_training(id_: str, passwd: str):
     logger.setLevel(logging.INFO)
     logger.addHandler(log_handler)
 
+    wake_event = Event()
+
+    def on_hup(sig, frame):
+        logger.info(f"Sig:{sig} Frame:{frame}")
+        wake_event.set()
+
+    signal(SIGHUP, on_hup)
+
     try:
         while True:
-            time.sleep(random.randint(30, 60) * 60)
+            delay_minutes = random.randint(30, 60)
+            logger.info(f"Will show dialog in {delay_minutes} minutes")
+
+            if wake_event.wait(delay_minutes * 60):
+                logger.info("Showing dialog on signal")
+            else:
+                logger.info("Showing dialog on timer")
 
             while True:
                 try:
@@ -46,6 +61,8 @@ def run_training(id_: str, passwd: str):
                     break
 
                 kdialog_error("Wrong!")
+
+            wake_event.clear()
 
     except Exception as e:
         logger.exception(str(e))
